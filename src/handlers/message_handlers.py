@@ -33,6 +33,10 @@ async def handle_user_text_message(update: Update, context: ContextTypes.DEFAULT
     username = user.first_name if user else "User"
     chat_id = update.message.chat.id
 
+    # Đảm bảo lưu chat_id của user để gửi thông báo định kỳ
+    from src.services.subscriber_service import subscriber_service
+    subscriber_service.add_subscriber(chat_id)
+
     logger.info("Nhận tin nhắn từ [%s - ID %s]: %s", username, user_id, user_text)
 
     # 1. Gửi tin nhắn phản hồi tức thì (< 0.2s) để người dùng biết bot đã tiếp nhận
