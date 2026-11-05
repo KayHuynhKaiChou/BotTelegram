@@ -13,6 +13,7 @@ class AppConfig:
     api_key: str = os.getenv("API_KEY", "")
     gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
     api_type: str = os.getenv("API_TYPE", "gemini")
+    default_subscriber_ids: str = os.getenv("DEFAULT_SUBSCRIBER_IDS", "")
 
     def validate(self) -> None:
         """Kiểm tra tính hợp lệ của các biến môi trường thiết yếu."""

@@ -4,6 +4,7 @@ from telegram.ext import ContextTypes
 from src.services.api_service import api_service
 from src.services.subscriber_service import subscriber_service
 from src.services.vocab_service import vocab_service
+from src.services.scheduler_service import vocab_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     username = user.first_name if user else "bạn"
     chat_id = update.effective_chat.id if update.effective_chat else 0
 
-    # Tự động đăng ký nhận tin nhắn định kỳ
     if chat_id:
         subscriber_service.add_subscriber(chat_id)
 
@@ -22,18 +22,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     welcome_text = (
         f"👋 Xin chào {username}!\n\n"
-        f"🤖 Tôi là **Bot Secretary** (@Kayhuyn_bot), được tích hợp **Gemini AI**.\n"
-        f"📊 Trạng thái AI: {status_api}\n\n"
-        f"⏰ **Lịch học từ vựng tự động:**\n"
-        f"• Đã bật thông báo nhận ngẫu nhiên 3 từ vựng mỗi ngày vào lúc **10:00** và **18:00**.\n\n"
+        f"🤖 Tôi là **Bot Secretary** (@Kayhuyn_bot), tích hợp **Gemini AI**.\n"
+        f"📊 Trạng thái AI: {status_api}\n"
+        f"🆔 **Telegram Chat ID của bạn**: `{chat_id}`\n\n"
+        f"🔔 **Lịch học từ vựng (10:00 & 18:00):**\n"
+        f"• Đã tự động kích hoạt cho tài khoản này! (Múi giờ GMT+7)\n\n"
         f"📌 **Các lệnh hữu ích:**\n"
-        f"/vocab - Lấy ngay 3 từ vựng ngẫu nhiên để học liền\n"
-        f"/status - Kiểm tra trạng thái hệ thống và số lượng từ vựng\n"
-        f"/reset - Xóa ngữ cảnh trò chuyện AI cũ\n"
-        f"/unsubscribe - Tạm dừng nhận lịch từ vựng mỗi ngày\n"
-        f"/subscribe - Bật lại lịch nhận từ vựng\n"
-        f"/help - Xem hướng dẫn chi tiết\n\n"
-        f"👉 Nhắn tin bất kỳ để trò chuyện hoặc hỏi đáp cùng AI!"
+        f"/vocab - Bốc ngay 3 từ vựng ngẫu nhiên kèm ví dụ\n"
+        f"/testcron - Thử ngay chức năng gửi tự động của hệ thống\n"
+        f"/status - Kiểm tra trạng thái hệ thống và Chat ID\n"
+        f"/unsubscribe - Tạm dừng nhận lịch từ vựng\n"
+        f"/subscribe - Bật lại lịch từ vựng\n"
+        f"/help - Hướng dẫn sử dụng chi tiết"
     )
     if update.message:
         await update.message.reply_text(welcome_text, parse_mode="Markdown")
@@ -44,7 +44,6 @@ async def vocab_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not update.message:
         return
 
-    # Thông báo đang lấy dữ liệu
     wait_msg = await update.message.reply_text("⏳ *Đang chọn lọc 3 từ vựng và tạo ví dụ thông minh...*", parse_mode="Markdown")
 
     try:
@@ -52,7 +51,6 @@ async def vocab_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await wait_msg.edit_text(content, parse_mode="Markdown")
     except Exception as e:
         logger.error("Lỗi khi xử lý lệnh /vocab: %s", e)
-        # Fallback không có markdown nếu parse lỗi
         try:
             vocabs = vocab_service.get_random_vocabs(3)
             fallback_text = "📖 Danh sách từ vựng hôm nay:\n" + "\n".join([f"- {v['word']}: {v['meaning']}" for v in vocabs])
@@ -61,13 +59,33 @@ async def vocab_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await wait_msg.edit_text("⚠️ Đã xảy ra lỗi khi tạo danh sách từ vựng.")
 
 
+async def testcron_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Lệnh test chạy ngay tiến trình gửi tự động của Cronjob."""
+    if not update.message:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+    if chat_id:
+        subscriber_service.add_subscriber(chat_id)
+
+    await update.message.reply_text("🚀 Đang chạy thử nghiệm luồng gửi tự động (Test Cron)...")
+    try:
+        await vocab_scheduler.broadcast_vocab_to_all(time_label="TEST TỰ ĐỘNG")
+    except Exception as e:
+        logger.error("Lỗi khi chạy testcron: %s", e)
+        await update.message.reply_text(f"⚠️ Lỗi khi phát tin nhắn: {e}")
+
+
 async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Đăng ký nhận từ vựng."""
     chat_id = update.effective_chat.id if update.effective_chat else 0
     if chat_id:
         subscriber_service.add_subscriber(chat_id)
         if update.message:
-            await update.message.reply_text("🔔 Đã đăng ký nhận 3 từ vựng vào **10:00** và **18:00** mỗi ngày!", parse_mode="Markdown")
+            await update.message.reply_text(
+                f"🔔 Đã đăng ký nhận từ vựng cho Chat ID `{chat_id}` vào **10:00** và **18:00** mỗi ngày!",
+                parse_mode="Markdown"
+            )
 
 
 async def unsubscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -76,17 +94,18 @@ async def unsubscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     if chat_id:
         subscriber_service.remove_subscriber(chat_id)
         if update.message:
-            await update.message.reply_text("🔕 Đã tạm dừng lịch nhận từ vựng hàng ngày. Bạn có thể dùng /subscribe để bật lại bất cứ lúc nào.")
+            await update.message.reply_text("🔕 Đã tạm dừng nhận thông báo từ vựng. Dùng /subscribe để bật lại.")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Xử lý lệnh /help."""
     help_text = (
-        "📖 **Hướng dẫn sử dụng Bot:**\n\n"
-        "1. **Học từ vựng định kỳ**: Bot tự động gửi 3 từ vựng vào 10:00 và 18:00 mỗi ngày.\n"
-        "2. **Học tức thì**: Gõ `/vocab` để lấy ngay 3 từ vựng kèm ví dụ.\n"
-        "3. **Trò chuyện cùng AI**: Nhắn tin tự nhiên như bình thường, AI sẽ trả lời bạn.\n"
-        "4. **/status**: Xem trạng thái bot và kho dữ liệu từ vựng."
+        "📖 **Hướng dẫn sử dụng Bot Secretary:**\n\n"
+        "1. **/start**: Đăng ký nhận từ vựng tự động (10:00 & 18:00).\n"
+        "2. **/vocab**: Bốc ngẫu nhiên 3 từ vựng học ngay lập tức.\n"
+        "3. **/testcron**: Kiểm tra chức năng gửi tin nhắn định kỳ.\n"
+        "4. **/status**: Xem chi tiết thông số hệ thống và danh sách đăng ký.\n"
+        "5. **Chat AI**: Nhắn bất kỳ câu hỏi nào để trò chuyện với Gemini."
     )
     if update.message:
         await update.message.reply_text(help_text, parse_mode="Markdown")
@@ -94,17 +113,22 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Xử lý lệnh /status."""
+    chat_id = update.effective_chat.id if update.effective_chat else 0
     is_ready = api_service.is_configured()
     total_vocab = len(vocab_service.vocabularies)
-    total_subscribers = len(subscriber_service.get_all())
+    subscribers = subscriber_service.get_all()
+    is_sub = subscriber_service.is_subscribed(chat_id)
 
     status_msg = (
         "⚙️ **Trạng thái hệ thống:**\n\n"
         f"• Telegram Bot: 🟢 Online\n"
-        f"• Gemini AI Engine: {'🟢 Sẵn sàng' if is_ready else '🔴 Chưa cấu hình'}\n"
-        f"• Kho từ vựng: 📚 **{total_vocab:,} từ vựng** (đã chuẩn hóa)\n"
-        f"• Lịch Cron: ⏰ **10:00 & 18:00 (GMT+7)**\n"
-        f"• Số người đăng ký nhận tin: 👥 **{total_subscribers}**\n"
+        f"• Gemini AI: {'🟢 Sẵn sàng' if is_ready else '🔴 Chưa cấu hình'}\n"
+        f"• Kho từ vựng: 📚 **{total_vocab:,} từ**\n"
+        f"• Khung giờ hẹn: ⏰ **10:00 & 18:00 (GMT+7)**\n"
+        f"• Số subscriber: 👥 **{len(subscribers)}**\n\n"
+        f"👤 **Tài khoản của bạn:**\n"
+        f"• Chat ID: `{chat_id}`\n"
+        f"• Trạng thái nhận lịch: {'🟢 ĐÃ ĐĂNG KÝ' if is_sub else '🔴 CHƯA ĐĂNG KÝ (Gõ /subscribe để bật)'}"
     )
     if update.message:
         await update.message.reply_text(status_msg, parse_mode="Markdown")
