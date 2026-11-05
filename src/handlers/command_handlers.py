@@ -1,5 +1,6 @@
 import logging
 from telegram import Update
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 from src.services.api_service import api_service
 from src.services.subscriber_service import subscriber_service
@@ -48,7 +49,10 @@ async def vocab_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     try:
         content = await vocab_service.generate_vocab_message(count=3, time_label="LUYỆN TẬP NGAY")
-        await wait_msg.edit_text(content, parse_mode="Markdown")
+        try:
+            await wait_msg.edit_text(content, parse_mode="Markdown")
+        except BadRequest:
+            await wait_msg.edit_text(content)
     except Exception as e:
         logger.error("Lỗi khi xử lý lệnh /vocab: %s", e)
         try:
@@ -68,12 +72,31 @@ async def testcron_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if chat_id:
         subscriber_service.add_subscriber(chat_id)
 
-    await update.message.reply_text("🚀 Đang chạy thử nghiệm luồng gửi tự động (Test Cron)...")
+    status_msg = await update.message.reply_text("⏳ Đang chuẩn bị 3 từ vựng và gọi AI tạo câu ví dụ...")
+
     try:
-        await vocab_scheduler.broadcast_vocab_to_all(time_label="TEST TỰ ĐỘNG")
+        # 1. Tạo tin nhắn từ vựng
+        message_text = await vocab_service.generate_vocab_message(count=3, time_label="TEST TỰ ĐỘNG")
+
+        # 2. Gửi thẳng vào chat của người test
+        try:
+            await update.message.reply_text(message_text, parse_mode="Markdown")
+        except BadRequest as be:
+            logger.warning("Markdown parse error (%s), gửi lại dạng plain text", be)
+            await update.message.reply_text(message_text)
+
+        # 3. Cập nhật thông báo trạng thái
+        total_subs = len(subscriber_service.get_all())
+        await status_msg.edit_text(
+            f"✅ **Đã gửi thành công!**\n"
+            f"🆔 Chat ID của bạn: `{chat_id}`\n"
+            f"👥 Danh sách nhận tin: `{total_subs}` tài khoản\n"
+            f"⏰ Lịch hẹn hàng ngày: **10:00** và **18:00** (GMT+7)",
+            parse_mode="Markdown"
+        )
     except Exception as e:
         logger.error("Lỗi khi chạy testcron: %s", e)
-        await update.message.reply_text(f"⚠️ Lỗi khi phát tin nhắn: {e}")
+        await status_msg.edit_text(f"⚠️ Lỗi khi tạo từ vựng: {e}")
 
 
 async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
