@@ -6,10 +6,12 @@ from src.config import config
 
 logger = logging.getLogger(__name__)
 
+# Thứ tự ưu tiên model: Đưa các dòng flash-lite lên đầu vì tốc độ cao và không bị nghẽn tải 503
 MODELS_PRIORITY = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
     "gemini-3.5-flash",
-    "gemini-3.8-flash",
-    "gemini-flash-latest"
+    "gemini-3.8-flash"
 ]
 
 SYSTEM_INSTRUCTION = (
@@ -65,15 +67,16 @@ class GeminiApiService:
             }
         }
 
-        timeout = aiohttp.ClientTimeout(total=25)
         last_error = None
+        # Giới hạn 8s cho mỗi model để không bị treo lâu nếu model gặp sự cố
+        req_timeout = aiohttp.ClientTimeout(total=8)
 
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with aiohttp.ClientSession() as session:
             for model_name in MODELS_PRIORITY:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.api_key}"
                 try:
                     logger.info("Đang gọi Gemini model '%s' cho user %s...", model_name, user_id)
-                    async with session.post(url, json=payload) as resp:
+                    async with session.post(url, json=payload, timeout=req_timeout) as resp:
                         data = await resp.json()
 
                         if resp.status == 200:
@@ -92,13 +95,12 @@ class GeminiApiService:
                                         self.conversations[user_id] = history[-self.max_history_turns * 2:]
                                     return reply_text
 
-                        # Nếu lỗi 503 / 429 quá tải, thử model tiếp theo
                         error_msg = data.get("error", {}).get("message", f"HTTP {resp.status}")
                         logger.warning("Model %s trả về lỗi: %s. Thử model tiếp...", model_name, error_msg)
                         last_error = error_msg
 
                 except Exception as e:
-                    logger.warning("Gọi model %s gặp lỗi kết nối: %s", model_name, e)
+                    logger.warning("Gọi model %s gặp timeout/lỗi: %s", model_name, e)
                     last_error = str(e)
                     continue
 
