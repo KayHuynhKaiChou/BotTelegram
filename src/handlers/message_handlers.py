@@ -39,6 +39,32 @@ async def handle_user_text_message(update: Update, context: ContextTypes.DEFAULT
 
     logger.info("Nhận tin nhắn từ [%s - ID %s]: %s", username, user_id, user_text)
 
+    # Nếu người dùng hỏi về danh sách lệnh, trả về ngay danh sách slash commands
+    lower_text = user_text.lower()
+    command_keywords = [
+        "danh sách lệnh", "các lệnh", "danh sach lenh", "cac lenh",
+        "lệnh nào", "lenh nao", "có lệnh gì", "co lenh gi",
+        "lệnh có thể sài", "lệnh có thể dùng", "lệnh có sẵn", "xem lệnh"
+    ]
+    if any(kw in lower_text for kw in command_keywords):
+        commands_reply = (
+            "📌 **Danh sách các lệnh hỗ trợ của Bot:**\n\n"
+            "• `/vocab` : Bốc ngay 3 từ vựng ngẫu nhiên kèm ví dụ thực tế\n"
+            "• `/status` : Xem trạng thái hệ thống, Chat ID và số lượng từ vựng\n"
+            "• `/testcron` : Chạy thử nghiệm gửi từ vựng tự động ngay lập tức\n"
+            "• `/start` : Khởi động và đăng ký nhận từ vựng lúc 10:00 & 18:00\n"
+            "• `/reset` : Xóa ngữ cảnh trò chuyện AI cũ để đổi chủ đề\n"
+            "• `/subscribe` : Bật nhận từ vựng mỗi ngày\n"
+            "• `/unsubscribe` : Tắt nhận từ vựng định kỳ\n"
+            "• `/help` : Hướng dẫn sử dụng chi tiết\n\n"
+            "💡 **Mẹo:** Bạn có thể bấm vào nút **[Menu]** ở góc dưới bên trái khung chat hoặc gõ dấu `/` để chọn lệnh nhanh!"
+        )
+        try:
+            await update.message.reply_text(commands_reply, parse_mode="Markdown")
+        except BadRequest:
+            await update.message.reply_text(commands_reply)
+        return
+
     # 1. Gửi tin nhắn phản hồi tức thì (< 0.2s) để người dùng biết bot đã tiếp nhận
     thinking_msg = None
     try:

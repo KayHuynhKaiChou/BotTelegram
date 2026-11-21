@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 from aiohttp import web
+from telegram import BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 from src.config import config
 from src.handlers.command_handlers import (
@@ -86,6 +87,23 @@ async def main() -> None:
     # Khởi chạy Polling bất đồng bộ
     await application.initialize()
     await application.start()
+
+    # Cài đặt Menu danh sách lệnh hiển thị trên Telegram client
+    try:
+        commands = [
+            BotCommand("vocab", "Bốc 3 từ vựng học ngay kèm ví dụ"),
+            BotCommand("status", "Xem trạng thái bot & Chat ID"),
+            BotCommand("testcron", "Chạy thử nghiệm gửi từ vựng"),
+            BotCommand("start", "Khởi động bot & đăng ký học từ vựng"),
+            BotCommand("help", "Xem hướng dẫn sử dụng chi tiết"),
+            BotCommand("reset", "Xóa ngữ cảnh hội thoại AI cũ"),
+            BotCommand("subscribe", "Bật nhận từ vựng 10:00 & 18:00"),
+            BotCommand("unsubscribe", "Tắt thông báo từ vựng hàng ngày")
+        ]
+        await application.bot.set_my_commands(commands)
+        logger.info("Đã đăng ký danh sách lệnh BotCommand lên Telegram.")
+    except Exception as e:
+        logger.warning("Không thể set_my_commands: %s", e)
 
     # 3. Kích hoạt Scheduler Cron Job (10:00 & 18:00 mỗi ngày)
     vocab_scheduler.initialize(application.bot)
