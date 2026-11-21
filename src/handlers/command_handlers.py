@@ -29,7 +29,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"🔔 **Lịch học từ vựng (10:00 & 18:00):**\n"
         f"• Đã tự động kích hoạt cho tài khoản này! (Múi giờ GMT+7)\n\n"
         f"📌 **Các lệnh hữu ích:**\n"
-        f"/find <từ> - Tra cứu từ vựng trong kho (không tốn API Key)\n"
+        f"/find <từ> - Tra cứu từ khóa nhanh (không tốn API Key)\n"
+        f"/find_high <chủ đề> - Tìm kiếm ngữ nghĩa bằng AI (VD: /find_high chủ đề giao thông)\n"
         f"/vocab - Bốc ngay 3 từ vựng ngẫu nhiên kèm ví dụ\n"
         f"/testcron - Thử ngay chức năng gửi tự động của hệ thống\n"
         f"/status - Kiểm tra trạng thái hệ thống và Chat ID\n"
@@ -46,13 +47,18 @@ async def find_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not update.message:
         return
 
+    # Nếu người dùng gõ /find -high ... hoặc /find-high
+    if context.args and context.args[0].lower() in ["-high", "high"]:
+        context.args = context.args[1:]
+        return await find_high_command(update, context)
+
     query = " ".join(context.args) if context.args else ""
     if not query.strip():
         guide = (
             "🔍 **Hướng dẫn tra cứu từ vựng:**\n\n"
-            "• **Tra 1 từ**: `/find simplify` hoặc `/find chi nhánh`\n"
-            "• **Tra nhiều từ**: `/find branch, traffic, loan`\n\n"
-            "💡 *Tra cứu tức thì 0.001s trực tiếp từ 1.445 từ trong kho, hoàn toàn KHÔNG tốn API Key!*"
+            "• **Tra từ khóa nhanh (0.001s, Free)**: `/find simplify` hoặc `/find branch, loan`\n"
+            "• **Tra ngữ nghĩa/chủ đề bằng AI**: `/find_high những từ về chủ đề giao thông`\n\n"
+            "💡 *Lệnh /find thông thường hoàn toàn KHÔNG tốn API Key!*"
         )
         await update.message.reply_text(guide, parse_mode="Markdown")
         return
@@ -61,7 +67,7 @@ async def find_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not results:
         await update.message.reply_text(
             f"❌ Không tìm thấy từ vựng nào khớp với: *{query}*\n"
-            f"💡 Thử tìm từ khóa ngắn hơn hoặc bằng tiếng Việt/tiếng Anh.",
+            f"💡 Bạn có thể thử tìm theo chủ đề thông minh hơn bằng lệnh: `/find_high {query}`",
             parse_mode="Markdown"
         )
         return
@@ -74,6 +80,42 @@ async def find_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(reply, parse_mode="Markdown")
     except BadRequest:
         await update.message.reply_text(reply)
+
+
+async def find_high_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Tra cứu ngữ nghĩa chuyên sâu bằng Gemini AI theo chủ đề/ngữ cảnh (VD: /find_high từ vựng về chủ đề giao thông)."""
+    if not update.message:
+        return
+
+    query = " ".join(context.args) if context.args else ""
+    if not query.strip():
+        guide = (
+            "🧠 **Hướng dẫn tìm kiếm ngữ nghĩa chuyên sâu bằng AI:**\n\n"
+            "AI sẽ đọc hiểu toàn bộ kho 1.445 từ của bạn để tìm từ theo **ý nghĩa, ngữ cảnh hoặc chủ đề** "
+            "(kể cả khi trong nghĩa không chứa chính xác từ khóa đó).\n\n"
+            "📌 **Ví dụ:**\n"
+            "• `/find_high từ vựng liên quan đến chủ đề giao thông, xe cộ`\n"
+            "• `/find_high các từ miêu tả cảm xúc vui vẻ, tích cực`\n"
+            "• `/find_high từ vựng dùng trong ký kết hợp đồng thương mại`"
+        )
+        await update.message.reply_text(guide, parse_mode="Markdown")
+        return
+
+    user_id = update.effective_user.id if update.effective_user else 0
+    wait_msg = await update.message.reply_text(
+        "🔍 *Gemini AI đang phân tích toàn bộ 1.445 từ vựng theo chủ đề của bạn...*",
+        parse_mode="Markdown"
+    )
+
+    try:
+        result = await vocab_service.search_high(query=query, user_id=user_id)
+        try:
+            await wait_msg.edit_text(result, parse_mode="Markdown")
+        except BadRequest:
+            await wait_msg.edit_text(result)
+    except Exception as e:
+        logger.error("Lỗi khi chạy find_high: %s", e)
+        await wait_msg.edit_text(f"⚠️ Có lỗi xảy ra trong quá trình tìm kiếm: {e}")
 
 
 async def vocab_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

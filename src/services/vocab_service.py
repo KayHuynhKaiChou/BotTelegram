@@ -196,5 +196,31 @@ class VocabService:
         scored_results.sort(key=lambda x: x[0], reverse=True)
         return [it[1] for it in scored_results[:limit]]
 
+    async def search_high(self, query: str, user_id: int = 0) -> str:
+        """Tìm kiếm ngữ nghĩa chuyên sâu (Semantic Search) bằng Gemini AI trên toàn bộ kho từ vựng.
+        Dùng cho các câu hỏi theo chủ đề (VD: 'những từ vựng về giao thông', 'từ liên quan đến pháp lý')."""
+        if not self.vocabularies:
+            self.load_vocabularies()
+
+        if not query or not query.strip():
+            return "⚠️ Vui lòng nhập chủ đề bạn muốn tìm. Ví dụ: `/find_high từ vựng về chủ đề giao thông`"
+
+        # Tóm tắt kho từ vựng gọn gàng để nạp vào context của AI
+        vocab_summary = "\n".join(f"{v['word']} : {v['meaning']}" for v in self.vocabularies)
+
+        prompt = (
+            f"Dưới đây là toàn bộ kho từ vựng trong cơ sở dữ liệu của người dùng:\n"
+            f"{vocab_summary}\n\n"
+            f"Yêu cầu của người dùng: '{query}'\n\n"
+            "Hãy phân tích ngữ nghĩa và trích xuất ra những từ vựng phù hợp nhất với yêu cầu trên từ danh sách đã cho. "
+            "Trình bày kết quả theo định dạng sau bằng Markdown:\n"
+            "1. **Tên từ vựng** (loại từ): Nghĩa tiếng Việt\n"
+            "   • *Giải thích ngắn:* Tại sao từ này thuộc chủ đề/yêu cầu trên.\n"
+            "   • *Ví dụ áp dụng:* 1 câu ví dụ song ngữ ngắn gọn.\n\n"
+            "Nếu không có từ nào thực sự liên quan, hãy thông báo lịch sự."
+        )
+
+        return await api_service.process_prompt(prompt, user_id=user_id)
+
 
 vocab_service = VocabService()

@@ -13,6 +13,7 @@ from src.handlers.command_handlers import (
     reset_command,
     vocab_command,
     find_command,
+    find_high_command,
     testcron_command,
     subscribe_command,
     unsubscribe_command,
@@ -78,6 +79,8 @@ async def main() -> None:
     application.add_handler(CommandHandler("reset", reset_command))
     application.add_handler(CommandHandler("vocab", vocab_command))
     application.add_handler(CommandHandler("find", find_command))
+    application.add_handler(CommandHandler("find_high", find_high_command))
+    application.add_handler(CommandHandler("findhigh", find_high_command))
     application.add_handler(CommandHandler("search", find_command))
     application.add_handler(CommandHandler("tra", find_command))
     application.add_handler(CommandHandler("testcron", testcron_command))
@@ -95,7 +98,8 @@ async def main() -> None:
     # Cài đặt Menu danh sách lệnh hiển thị trên Telegram client
     try:
         commands = [
-            BotCommand("find", "Tra cứu từ vựng (VD: /find simplify)"),
+            BotCommand("find", "Tra cứu từ khóa nhanh (0.001s, Free)"),
+            BotCommand("find_high", "Tìm từ theo chủ đề bằng AI"),
             BotCommand("vocab", "Bốc 3 từ vựng học ngay kèm ví dụ"),
             BotCommand("status", "Xem trạng thái bot & Chat ID"),
             BotCommand("testcron", "Chạy thử nghiệm gửi từ vựng"),

@@ -79,8 +79,8 @@ class GeminiApiService:
         }
 
         last_error = None
-        # Giới hạn 8s cho mỗi model để không bị treo lâu nếu model gặp sự cố
-        req_timeout = aiohttp.ClientTimeout(total=8)
+        # Giới hạn 20s cho mỗi model (phù hợp cho cả prompt lớn phân tích ngữ nghĩa)
+        req_timeout = aiohttp.ClientTimeout(total=20)
 
         async with aiohttp.ClientSession() as session:
             for model_name in MODELS_PRIORITY:
