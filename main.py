@@ -17,6 +17,7 @@ from src.handlers.command_handlers import (
     testcron_command,
     subscribe_command,
     unsubscribe_command,
+    unknown_command_handler,
 )
 from src.handlers.message_handlers import handle_user_text_message
 from src.services.scheduler_service import vocab_scheduler
@@ -90,6 +91,9 @@ async def main() -> None:
     application.add_handler(
         MessageHandler(filters.TEXT & (~filters.COMMAND), handle_user_text_message)
     )
+
+    # Bắt tất cả các lệnh gạch chéo không hợp lệ
+    application.add_handler(MessageHandler(filters.COMMAND, unknown_command_handler))
 
     # Khởi chạy Polling bất đồng bộ
     await application.initialize()

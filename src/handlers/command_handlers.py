@@ -241,3 +241,13 @@ async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     api_service.reset_conversation(user_id)
     if update.message:
         await update.message.reply_text("🧹 Đã xóa ngữ cảnh trò chuyện cũ! Bắt đầu chủ đề mới ngay.")
+
+
+async def unknown_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Xử lý khi người dùng gõ lệnh không tồn tại."""
+    if update.message:
+        await update.message.reply_text(
+            "⚠️ Lệnh này chưa được hỗ trợ hoặc đang cập nhật!\n"
+            "💡 Bấm nút **[Menu]** ở góc dưới bên trái hoặc gõ **/help** để xem danh sách các lệnh.",
+            parse_mode="Markdown"
+        )
