@@ -1,3 +1,4 @@
+import difflib
 import logging
 import os
 import random
@@ -35,7 +36,6 @@ class VocabService:
             return
 
         loaded_items: List[Dict[str, str]] = []
-        # Regex tìm các cặp {tv: "...", mean: "..."} hỗ trợ dấu ngoặc kép hoặc đơn
         pattern = re.compile(
             r'\{\s*(?:["\']?tv["\']?)\s*:\s*["\'](.*?)["\']\s*,\s*(?:["\']?mean["\']?)\s*:\s*["\'](.*?)["\']\s*\}',
             re.DOTALL
@@ -44,7 +44,6 @@ class VocabService:
         for filename in sorted(os.listdir(target_dir)):
             if not filename.endswith(".js"):
                 continue
-            # Bỏ qua các file logic không chứa mảng từ vựng
             if filename in ["api-config.js", "flipCard.js", "gemini-sentence-service.js", "handleShowCards.js"]:
                 continue
 
@@ -108,12 +107,10 @@ class VocabService:
         if not vocabs:
             return "⚠️ Chưa tìm thấy dữ liệu từ vựng trong hệ thống."
 
-        # Định dạng cơ bản
         base_text = f"📖 **[TỪ VỰNG HỌC TẬP - {time_label}]**\n\n"
         for i, v in enumerate(vocabs, 1):
             base_text += f"**{i}. {v['word']}**\n   • Nghĩa: _{v['meaning']}_\n   • Nguồn: `{v['source']}`\n\n"
 
-        # Tăng cường thêm ví dụ thực tế qua Gemini AI
         prompt = (
             "Dưới đây là 3 từ vựng người dùng cần học hôm nay:\n"
             + "\n".join([f"- {v['word']}: {v['meaning']}" for v in vocabs])
@@ -130,36 +127,74 @@ class VocabService:
 
         return base_text
 
+    def _score_match(self, term: str, word: str, meaning: str) -> int:
+        """Tính điểm phù hợp giữa từ khóa tìm kiếm và từ vựng (thông minh, không phụ thuộc thứ tự từ hay từ chen giữa)."""
+        t = term.lower().strip()
+        w = word.lower().strip()
+        m = meaning.lower().strip()
+        full = f"{w} {m}"
+
+        # 1. Khớp chính xác tuyệt đối (100đ)
+        if t == w or t == m:
+            return 100
+
+        # 2. Khớp cụm từ con trực tiếp (85đ)
+        if t in w:
+            return 85
+        if t in m:
+            return 80
+
+        # 3. Khớp tất cả các từ đơn (Token-Set Matching) - VD: 'phanh xe' khớp 'phanh thắng xe' (70đ)
+        tokens = [tok for tok in t.split() if tok]
+        if len(tokens) > 1 and all(tok in full for tok in tokens):
+            return 70
+
+        # 4. Fuzzy Matching (Chống gõ sai chính tả nhẹ - typo tolerance)
+        r_w = difflib.SequenceMatcher(None, t, w).ratio()
+        r_m = difflib.SequenceMatcher(None, t, m).ratio()
+        best_ratio = max(r_w, r_m)
+        if best_ratio >= 0.72:
+            return int(best_ratio * 60)
+
+        # 5. Khớp ít nhất 1 từ đơn có ý nghĩa (nếu cụm dài)
+        if len(tokens) > 1:
+            matched_count = sum(1 for tok in tokens if len(tok) >= 2 and tok in full)
+            if matched_count >= len(tokens) * 0.6:
+                return 40
+
+        return 0
+
     def search_vocabs(self, query: str, limit: int = 15) -> List[Dict[str, str]]:
-        """Tra cứu 1 hoặc nhiều từ vựng (hỗ trợ phân tách bằng dấu phẩy). Tìm kiếm cả từ và nghĩa."""
+        """Tra cứu thông minh: Hỗ trợ tìm từ chen giữa (VD: 'phanh xe' khớp 'phanh thắng xe'),
+        chống gõ sai (typo tolerance), tìm ngược thứ tự từ, và tra cứu nhiều từ ngăn cách bằng dấu phẩy."""
         if not self.vocabularies:
             self.load_vocabularies()
 
         if not query or not query.strip():
             return []
 
-        # Tách các từ cần tìm (hỗ trợ phân tách bằng dấu phẩy hoặc chấm phẩy)
-        raw_terms = [t.strip().lower() for t in query.replace(";", ",").split(",") if t.strip()]
+        # Tách các từ cần tìm (ngăn cách bằng dấu phẩy hoặc chấm phẩy)
+        raw_terms = [t.strip() for t in query.replace(";", ",").split(",") if t.strip()]
         if not raw_terms:
             return []
 
-        results: List[Dict[str, str]] = []
+        scored_results: List[tuple[int, Dict[str, str]]] = []
         seen = set()
 
         for term in raw_terms:
             for item in self.vocabularies:
-                word_lower = item["word"].lower()
-                meaning_lower = item["meaning"].lower()
+                unique_key = (item["word"], item["meaning"])
+                if unique_key in seen:
+                    continue
 
-                if term in word_lower or term in meaning_lower:
-                    unique_key = (item["word"], item["meaning"])
-                    if unique_key not in seen:
-                        seen.add(unique_key)
-                        results.append(item)
-                        if len(results) >= limit:
-                            return results
+                score = self._score_match(term, item["word"], item["meaning"])
+                if score > 0:
+                    scored_results.append((score, item))
+                    seen.add(unique_key)
 
-        return results
+        # Sắp xếp theo độ khớp cao nhất lên trước
+        scored_results.sort(key=lambda x: x[0], reverse=True)
+        return [it[1] for it in scored_results[:limit]]
 
 
 vocab_service = VocabService()
