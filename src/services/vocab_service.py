@@ -130,5 +130,36 @@ class VocabService:
 
         return base_text
 
+    def search_vocabs(self, query: str, limit: int = 15) -> List[Dict[str, str]]:
+        """Tra cứu 1 hoặc nhiều từ vựng (hỗ trợ phân tách bằng dấu phẩy). Tìm kiếm cả từ và nghĩa."""
+        if not self.vocabularies:
+            self.load_vocabularies()
+
+        if not query or not query.strip():
+            return []
+
+        # Tách các từ cần tìm (hỗ trợ phân tách bằng dấu phẩy hoặc chấm phẩy)
+        raw_terms = [t.strip().lower() for t in query.replace(";", ",").split(",") if t.strip()]
+        if not raw_terms:
+            return []
+
+        results: List[Dict[str, str]] = []
+        seen = set()
+
+        for term in raw_terms:
+            for item in self.vocabularies:
+                word_lower = item["word"].lower()
+                meaning_lower = item["meaning"].lower()
+
+                if term in word_lower or term in meaning_lower:
+                    unique_key = (item["word"], item["meaning"])
+                    if unique_key not in seen:
+                        seen.add(unique_key)
+                        results.append(item)
+                        if len(results) >= limit:
+                            return results
+
+        return results
+
 
 vocab_service = VocabService()

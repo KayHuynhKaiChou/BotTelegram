@@ -49,6 +49,7 @@ async def handle_user_text_message(update: Update, context: ContextTypes.DEFAULT
     if any(kw in lower_text for kw in command_keywords):
         commands_reply = (
             "📌 **Danh sách các lệnh hỗ trợ của Bot:**\n\n"
+            "• `/find <từ>` : Tra cứu 1 hoặc nhiều từ vựng (VD: `/find simplify, branch`) không tốn API Key\n"
             "• `/vocab` : Bốc ngay 3 từ vựng ngẫu nhiên kèm ví dụ thực tế\n"
             "• `/status` : Xem trạng thái hệ thống, Chat ID và số lượng từ vựng\n"
             "• `/testcron` : Chạy thử nghiệm gửi từ vựng tự động ngay lập tức\n"

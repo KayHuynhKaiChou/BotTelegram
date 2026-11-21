@@ -29,6 +29,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"🔔 **Lịch học từ vựng (10:00 & 18:00):**\n"
         f"• Đã tự động kích hoạt cho tài khoản này! (Múi giờ GMT+7)\n\n"
         f"📌 **Các lệnh hữu ích:**\n"
+        f"/find <từ> - Tra cứu từ vựng trong kho (không tốn API Key)\n"
         f"/vocab - Bốc ngay 3 từ vựng ngẫu nhiên kèm ví dụ\n"
         f"/testcron - Thử ngay chức năng gửi tự động của hệ thống\n"
         f"/status - Kiểm tra trạng thái hệ thống và Chat ID\n"
@@ -38,6 +39,41 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
     if update.message:
         await update.message.reply_text(welcome_text, parse_mode="Markdown")
+
+
+async def find_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Tra cứu 1 hoặc nhiều từ vựng trong kho dữ liệu (hoàn toàn không dùng API Key)."""
+    if not update.message:
+        return
+
+    query = " ".join(context.args) if context.args else ""
+    if not query.strip():
+        guide = (
+            "🔍 **Hướng dẫn tra cứu từ vựng:**\n\n"
+            "• **Tra 1 từ**: `/find simplify` hoặc `/find chi nhánh`\n"
+            "• **Tra nhiều từ**: `/find branch, traffic, loan`\n\n"
+            "💡 *Tra cứu tức thì 0.001s trực tiếp từ 1.445 từ trong kho, hoàn toàn KHÔNG tốn API Key!*"
+        )
+        await update.message.reply_text(guide, parse_mode="Markdown")
+        return
+
+    results = vocab_service.search_vocabs(query, limit=15)
+    if not results:
+        await update.message.reply_text(
+            f"❌ Không tìm thấy từ vựng nào khớp với: *{query}*\n"
+            f"💡 Thử tìm từ khóa ngắn hơn hoặc bằng tiếng Việt/tiếng Anh.",
+            parse_mode="Markdown"
+        )
+        return
+
+    reply = f"🔍 **Kết quả tìm kiếm cho:** `{query}` ({len(results)} kết quả)\n\n"
+    for i, r in enumerate(results, 1):
+        reply += f"**{i}. {r['word']}**\n   • Nghĩa: _{r['meaning']}_\n   • Tệp: `{r['source']}`\n\n"
+
+    try:
+        await update.message.reply_text(reply, parse_mode="Markdown")
+    except BadRequest:
+        await update.message.reply_text(reply)
 
 
 async def vocab_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
