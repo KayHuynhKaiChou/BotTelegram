@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Flashcard Từ Vựng - Kayhuyn Bot</title>
+    <!-- Telegram WebApp SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-color: var(--tg-theme-bg-color, #0f172a);
+            --text-color: var(--tg-theme-text-color, #f8fafc);
+            --hint-color: var(--tg-theme-hint-color, #94a3b8);
+            --button-color: var(--tg-theme-button-color, #38bdf8);
+            --button-text-color: var(--tg-theme-button-text-color, #ffffff);
+            --card-bg: var(--tg-theme-secondary-bg-color, #1e293b);
+            --accent: #38bdf8;
+            --accent-gradient: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px;
+            overflow-x: hidden;
+        }
+
+        .header {
+            width: 100%;
+            max-width: 480px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .header h1 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .counter {
+            font-size: 0.85rem;
+            color: var(--hint-color);
+            background: rgba(255, 255, 255, 0.06);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        /* Category Filter Tabs */
+        .tabs {
+            width: 100%;
+            max-width: 480px;
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            margin-bottom: 16px;
+            scrollbar-width: none;
+        }
+        .tabs::-webkit-scrollbar { display: none; }
+
+        .tab-btn {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-color);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn.active {
+            background: var(--accent);
+            color: #0f172a;
+            border-color: var(--accent);
+            font-weight: 700;
+        }
+
+        /* 3D Flashcard Container */
+        .card-container {
+            width: 100%;
+            max-width: 400px;
+            height: 320px;
+            perspective: 1000px;
+            margin-bottom: 24px;
+            cursor: pointer;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            transform-style: preserve-3d;
+            border-radius: 24px;
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        .card-container.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+            border-radius: 24px;
+            background: var(--card-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .card-back {
+            transform: rotateY(180deg);
+            background: linear-gradient(145deg, var(--card-bg), rgba(56, 189, 248, 0.1));
+            border-color: rgba(56, 189, 248, 0.3);
+        }
+
+        .tag-source {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            font-size: 0.7rem;
+            color: var(--hint-color);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 3px 8px;
+            border-radius: 8px;
+            text-transform: uppercase;
+        }
+
+        .speaker-btn {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            background: rgba(255, 255, 255, 0.08);
+            border: none;
+            color: var(--accent);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .speaker-btn:active { transform: scale(0.9); }
+
+        .vocab-word {
+            font-size: 1.85rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            line-height: 1.25;
+            word-break: break-word;
+        }
+
+        .vocab-mean {
+            font-size: 1.35rem;
+            font-weight: 600;
+            color: #38bdf8;
+            margin-bottom: 16px;
+            line-height: 1.35;
+        }
+
+        .tap-hint {
+            position: absolute;
+            bottom: 16px;
+            font-size: 0.75rem;
+            color: var(--hint-color);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Action Controls */
+        .controls {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn-ctrl {
+            flex: 1;
+            padding: 14px 16px;
+            border-radius: 16px;
+            border: none;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text-color);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+        }
+        .btn-ctrl:active { transform: scale(0.97); }
+
+        .btn-shuffle {
+            flex: 0 0 50px;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--accent);
+            font-size: 1.2rem;
+        }
+
+        .btn-next {
+            background: var(--accent);
+            color: #0f172a;
+            font-weight: 700;
+        }
+
+        /* Loading skeleton */
+        .loading {
+            font-size: 1rem;
+            color: var(--hint-color);
+            margin: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>✨ Flashcard Vocab</h1>
+        <div class="counter" id="counter">0 / 0</div>
+    </div>
+
+    <!-- Category selector -->
+    <div class="tabs" id="tabs">
+        <button class="tab-btn active" data-category="all">Tất cả</button>
+        <button class="tab-btn" data-category="toeic">TOEIC</button>
+        <button class="tab-btn" data-category="kanji">Kanji</button>
+        <button class="tab-btn" data-category="hiragana">Hiragana</button>
+    </div>
+
+    <!-- 3D Flashcard -->
+    <div class="card-container" id="cardContainer">
+        <div class="card-inner" id="cardInner">
+            <div class="card-front">
+                <span class="tag-source" id="cardSourceFront">Loading...</span>
+                <button class="speaker-btn" id="btnSpeakFront" title="Phát âm">🔊</button>
+                <div class="vocab-word" id="cardWord">Đang tải từ vựng...</div>
+                <div class="tap-hint">👆 Chạm vào thẻ để xem nghĩa</div>
+            </div>
+            <div class="card-back">
+                <span class="tag-source" id="cardSourceBack">Meaning</span>
+                <button class="speaker-btn" id="btnSpeakBack" title="Phát âm">🔊</button>
+                <div class="vocab-mean" id="cardMean">...</div>
+                <div class="tap-hint">👆 Chạm để quay lại mặt trước</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+        <button class="btn-ctrl" id="btnPrev">⬅️ Trước</button>
+        <button class="btn-ctrl btn-shuffle" id="btnShuffle" title="Trộn ngẫu nhiên">🔀</button>
+        <button class="btn-ctrl btn-next" id="btnNext">Tiếp ➡️</button>
+    </div>
+
+    <script>
+        // Khởi tạo Telegram WebApp
+        const tg = window.Telegram?.WebApp;
+        if (tg) {
+            tg.ready();
+            tg.expand();
+        }
+
+        function triggerHaptic() {
+            if (tg?.HapticFeedback) {
+                tg.HapticFeedback.impactOccurred('light');
+            }
+        }
+
+        let allVocabs = [];
+        let filteredVocabs = [];
+        let currentIndex = 0;
+
+        // Elements
+        const cardContainer = document.getElementById('cardContainer');
+        const cardWord = document.getElementById('cardWord');
+        const cardMean = document.getElementById('cardMean');
+        const cardSourceFront = document.getElementById('cardSourceFront');
+        const cardSourceBack = document.getElementById('cardSourceBack');
+        const counterEl = document.getElementById('counter');
+        const btnPrev = document.getElementById('btnPrev');
+        const btnNext = document.getElementById('btnNext');
+        const btnShuffle = document.getElementById('btnShuffle');
+        const tabsContainer = document.getElementById('tabs');
+        const btnSpeakFront = document.getElementById('btnSpeakFront');
+        const btnSpeakBack = document.getElementById('btnSpeakBack');
+
+        // Tải từ vựng từ API của bot
+        async function fetchVocabs() {
+            try {
+                const res = await fetch('/api/vocabs');
+                const data = await res.json();
+                allVocabs = data.vocabularies || [];
+                filterCategory('all');
+            } catch (err) {
+                cardWord.innerText = "Lỗi nạp từ vựng";
+                cardMean.innerText = "Vui lòng thử lại sau";
+            }
+        }
+
+        // Lọc danh mục
+        function filterCategory(cat) {
+            if (cat === 'all') {
+                filteredVocabs = [...allVocabs];
+            } else if (cat === 'toeic') {
+                filteredVocabs = allVocabs.filter(v => v.source.toLowerCase().includes('toeic'));
+            } else if (cat === 'kanji') {
+                filteredVocabs = allVocabs.filter(v => v.source.toLowerCase().includes('kanji'));
+            } else if (cat === 'hiragana') {
+                filteredVocabs = allVocabs.filter(v => v.source.toLowerCase().includes('hiragana'));
+            }
+            currentIndex = 0;
+            renderCard();
+        }
+
+        // Hiển thị thẻ hiện tại
+        function renderCard() {
+            cardContainer.classList.remove('flipped');
+            if (filteredVocabs.length === 0) {
+                cardWord.innerText = "Không có từ nào";
+                cardMean.innerText = "";
+                counterEl.innerText = "0 / 0";
+                return;
+            }
+
+            const item = filteredVocabs[currentIndex];
+            cardWord.innerText = item.word;
+            cardMean.innerText = item.meaning;
+            cardSourceFront.innerText = item.source.replace('.js', '');
+            cardSourceBack.innerText = item.source.replace('.js', '');
+            counterEl.innerText = `${currentIndex + 1} / ${filteredVocabs.length}`;
+        }
+
+        // Lật thẻ
+        cardContainer.addEventListener('click', () => {
+            cardContainer.classList.toggle('flipped');
+            triggerHaptic();
+        });
+
+        // Nút chuyển thẻ
+        btnNext.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (filteredVocabs.length === 0) return;
+            currentIndex = (currentIndex + 1) % filteredVocabs.length;
+            renderCard();
+            triggerHaptic();
+        });
+
+        btnPrev.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (filteredVocabs.length === 0) return;
+            currentIndex = (currentIndex - 1 + filteredVocabs.length) % filteredVocabs.length;
+            renderCard();
+            triggerHaptic();
+        });
+
+        btnShuffle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            for (let i = filteredVocabs.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [filteredVocabs[i], filteredVocabs[j]] = [filteredVocabs[j], filteredVocabs[i]];
+            }
+            currentIndex = 0;
+            renderCard();
+            triggerHaptic();
+        });
+
+        // Tabs category click
+        tabsContainer.addEventListener('click', (e) => {
+            if (e.target.classList.contains('tab-btn')) {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                filterCategory(e.target.dataset.category);
+            }
+        });
+
+        // Phát âm từ vựng (Text-to-Speech)
+        function speak(text) {
+            if (!('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            // Tự động nhận diện tiếng Nhật hay tiếng Anh
+            if (/[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(text)) {
+                utterance.lang = 'ja-JP';
+            } else {
+                utterance.lang = 'en-US';
+            }
+            window.speechSynthesis.speak(utterance);
+        }
+
+        btnSpeakFront.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const text = cardWord.innerText.replace(/\(.*?\)/g, '').trim();
+            speak(text);
+        });
+
+        btnSpeakBack.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const text = cardMean.innerText.split('-')[0].trim();
+            speak(text);
+        });
+
+        // Khởi động
+        fetchVocabs();
+    </script>
+</body>
+</html>

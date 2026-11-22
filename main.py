@@ -3,8 +3,14 @@ import logging
 import os
 import sys
 from aiohttp import web
-from telegram import BotCommand
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+from telegram import BotCommand, MenuButtonWebApp, WebAppInfo
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    filters,
+)
 from src.config import config
 from src.handlers.command_handlers import (
     start_command,
@@ -19,8 +25,10 @@ from src.handlers.command_handlers import (
     unsubscribe_command,
     unknown_command_handler,
 )
+from src.handlers.callback_handlers import handle_callback_query, MINI_APP_URL
 from src.handlers.message_handlers import handle_user_text_message
 from src.services.scheduler_service import vocab_scheduler
+from src.routes.web_app_routes import register_web_routes
 
 # Đảm bảo console Windows in tiếng Việt UTF-8 không bị lỗi charmap
 if sys.platform == "win32":
@@ -42,31 +50,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def healthcheck(request: web.Request) -> web.Response:
-    """Endpoint HTTP healthcheck cho Render / Cloud."""
-    return web.Response(text="Bot is running healthy!", content_type="text/plain")
-
-
 async def main() -> None:
-    """Điểm khởi chạy ứng dụng Telegram Bot kết hợp Web Healthcheck và Scheduler."""
+    """Điểm khởi chạy ứng dụng Telegram Bot kết hợp Web App, API, Scheduler và Nút bấm."""
     try:
         config.validate()
     except ValueError as e:
         logger.error("Lỗi cấu hình: %s", e)
         sys.exit(1)
 
-    # 1. Khởi chạy HTTP server ngầm để Render nhận diện service
+    # 1. Khởi chạy HTTP server phục vụ Telegram Mini App (Flashcard UI) & API
     port = int(os.getenv("PORT", "10000"))
     app = web.Application()
-    app.router.add_get("/", healthcheck)
-    app.router.add_get("/health", healthcheck)
+    register_web_routes(app)
 
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     try:
         await site.start()
-        logger.info("Healthcheck web server đã chạy tại port %s", port)
+        logger.info("Web Server & Mini App đã chạy tại port %s", port)
     except Exception as e:
         logger.warning("Không thể bind web port %s: %s", port, e)
 
@@ -74,6 +76,7 @@ async def main() -> None:
     logger.info("Đang khởi động Telegram Bot...")
     application = ApplicationBuilder().token(config.telegram_bot_token).build()
 
+    # Đăng ký các command handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("status", status_command))
@@ -88,6 +91,10 @@ async def main() -> None:
     application.add_handler(CommandHandler("subscribe", subscribe_command))
     application.add_handler(CommandHandler("unsubscribe", unsubscribe_command))
 
+    # Đăng ký xử lý nút bấm tương tác (Inline Keyboard Callback)
+    application.add_handler(CallbackQueryHandler(handle_callback_query))
+
+    # Xử lý tin nhắn văn bản thường
     application.add_handler(
         MessageHandler(filters.TEXT & (~filters.COMMAND), handle_user_text_message)
     )
@@ -99,7 +106,7 @@ async def main() -> None:
     await application.initialize()
     await application.start()
 
-    # Cài đặt Menu danh sách lệnh hiển thị trên Telegram client
+    # Cài đặt danh sách lệnh BotCommand trên Telegram client
     try:
         commands = [
             BotCommand("find", "Tra cứu từ khóa nhanh (0.001s, Free)"),
@@ -114,9 +121,17 @@ async def main() -> None:
             BotCommand("unsubscribe", "Tắt thông báo từ vựng hàng ngày")
         ]
         await application.bot.set_my_commands(commands)
-        logger.info("Đã đăng ký danh sách lệnh BotCommand lên Telegram.")
+
+        # Cài đặt nút Menu góc dưới bên trái thành nút mở Mini App trực tiếp
+        await application.bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text="🚀 Mini App",
+                web_app=WebAppInfo(url=MINI_APP_URL)
+            )
+        )
+        logger.info("Đã đăng ký MenuButtonWebApp và BotCommand lên Telegram.")
     except Exception as e:
-        logger.warning("Không thể set_my_commands: %s", e)
+        logger.warning("Không thể set bot commands / menu button: %s", e)
 
     # 3. Kích hoạt Scheduler Cron Job (10:00 & 18:00 mỗi ngày)
     vocab_scheduler.initialize(application.bot)

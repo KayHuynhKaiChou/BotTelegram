@@ -6,6 +6,7 @@ from src.services.api_service import api_service
 from src.services.subscriber_service import subscriber_service
 from src.services.vocab_service import vocab_service
 from src.services.scheduler_service import vocab_scheduler
+from src.handlers.callback_handlers import get_vocab_keyboard, get_start_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"/help - Hướng dẫn sử dụng chi tiết"
     )
     if update.message:
-        await update.message.reply_text(welcome_text, parse_mode="Markdown")
+        try:
+            await update.message.reply_text(welcome_text, parse_mode="Markdown", reply_markup=get_start_keyboard())
+        except BadRequest:
+            await update.message.reply_text(welcome_text, reply_markup=get_start_keyboard())
 
 
 async def find_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -128,15 +132,15 @@ async def vocab_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         content = await vocab_service.generate_vocab_message(count=3, time_label="LUYỆN TẬP NGAY")
         try:
-            await wait_msg.edit_text(content, parse_mode="Markdown")
+            await wait_msg.edit_text(content, parse_mode="Markdown", reply_markup=get_vocab_keyboard())
         except BadRequest:
-            await wait_msg.edit_text(content)
+            await wait_msg.edit_text(content, reply_markup=get_vocab_keyboard())
     except Exception as e:
         logger.error("Lỗi khi xử lý lệnh /vocab: %s", e)
         try:
             vocabs = vocab_service.get_random_vocabs(3)
             fallback_text = "📖 Danh sách từ vựng hôm nay:\n" + "\n".join([f"- {v['word']}: {v['meaning']}" for v in vocabs])
-            await wait_msg.edit_text(fallback_text)
+            await wait_msg.edit_text(fallback_text, reply_markup=get_vocab_keyboard())
         except Exception:
             await wait_msg.edit_text("⚠️ Đã xảy ra lỗi khi tạo danh sách từ vựng.")
 
@@ -158,10 +162,10 @@ async def testcron_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
         # 2. Gửi thẳng vào chat của người test
         try:
-            await update.message.reply_text(message_text, parse_mode="Markdown")
+            await update.message.reply_text(message_text, parse_mode="Markdown", reply_markup=get_vocab_keyboard())
         except BadRequest as be:
             logger.warning("Markdown parse error (%s), gửi lại dạng plain text", be)
-            await update.message.reply_text(message_text)
+            await update.message.reply_text(message_text, reply_markup=get_vocab_keyboard())
 
         # 3. Cập nhật thông báo trạng thái
         total_subs = len(subscriber_service.get_all())

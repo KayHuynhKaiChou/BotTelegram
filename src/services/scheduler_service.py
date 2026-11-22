@@ -5,6 +5,7 @@ from telegram import Bot
 from telegram.error import BadRequest
 from src.services.subscriber_service import subscriber_service
 from src.services.vocab_service import vocab_service
+from src.handlers.callback_handlers import get_vocab_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +71,8 @@ class VocabSchedulerService:
                 await self.bot.send_message(
                     chat_id=chat_id,
                     text=message_text,
-                    parse_mode="Markdown"
+                    parse_mode="Markdown",
+                    reply_markup=get_vocab_keyboard()
                 )
                 success_count += 1
                 logger.info("Đã gửi từ vựng thành công cho chat_id %s", chat_id)
@@ -79,7 +81,8 @@ class VocabSchedulerService:
                 try:
                     await self.bot.send_message(
                         chat_id=chat_id,
-                        text=message_text
+                        text=message_text,
+                        reply_markup=get_vocab_keyboard()
                     )
                     success_count += 1
                 except Exception as inner_e:
